@@ -5,7 +5,6 @@ import { ReportViewer } from './components/ReportViewer';
 import type { ProcessingStatus as ProcessingStatusType, Report } from './types';
 import { config } from './config';
 import { initializeOpenAI } from './services/openai';
-import { initializeChroma, addClaims } from './services/chroma';
 import { createDocumentFromFile, extractUtterances } from './services/parser';
 import { extractClaimsFromUtterances } from './services/claimExtractor';
 import { findContradictions } from './services/contradictionDetector';
@@ -31,13 +30,7 @@ function App() {
       }
       initializeOpenAI(config.openai.apiKey);
 
-      // Initialize Chroma Cloud
-      if (config.chroma.apiKey && config.chroma.tenant && config.chroma.database) {
-        initializeChroma();
-      } else {
-        console.warn('Chroma Cloud not configured - semantic search may be limited');
-      }
-
+      console.log('✓ OpenAI initialized successfully');
       setIsInitialized(true);
     } catch (error: any) {
       console.error('Initialization error:', error);
@@ -105,7 +98,8 @@ function App() {
         message: 'Generating embeddings for semantic analysis...',
       });
 
-      // Step 3: Generate embeddings and store in Chroma
+      // Step 3: Generate embeddings for local vector search
+      let embeddings: number[][] = [];
       try {
         // Filter and validate claim texts before generating embeddings
         const validClaims = claims.filter(c => c.normalizedText && c.normalizedText.trim().length > 0);
@@ -119,21 +113,8 @@ function App() {
         }
 
         const claimTexts = validClaims.map(c => c.normalizedText);
-        const embeddings = await generateBatchEmbeddings(claimTexts);
-
-        const claimsWithEmbeddings = validClaims.map((claim, i) => ({
-          claim,
-          embedding: embeddings[i],
-        }));
-
-        // Store in Chroma
-        try {
-          await addClaims(claimsWithEmbeddings);
-        } catch (chromaError: any) {
-          console.error('Chroma storage failed:', chromaError);
-          // Continue without Chroma - contradiction detection will still work
-          alert(`Warning: Failed to store data in Chroma Cloud: ${chromaError.message}. Analysis will continue but semantic search may be limited.`);
-        }
+        embeddings = await generateBatchEmbeddings(claimTexts);
+        console.log(`✓ Generated ${embeddings.length} embeddings for local vector search`);
 
         setStatus({
           stage: 'analyzing',
@@ -141,7 +122,7 @@ function App() {
           message: 'Detecting contradictions and inconsistencies...',
         });
 
-        // Step 4: Detect contradictions
+        // Step 4: Detect contradictions using local vector similarity
         const contradictions = await findContradictions(claims, 8, 0.7, (progress) => {
           const analysisProgress = 70 + (progress.current / progress.total) * 25;
           setStatus({
@@ -149,7 +130,7 @@ function App() {
             progress: analysisProgress,
             message: `Analyzing (${progress.current}/${progress.total} claims, ${progress.contradictionsFound} contradictions found)`,
           });
-        });
+        }, embeddings);
 
         saveContradictions(contradictions);
 

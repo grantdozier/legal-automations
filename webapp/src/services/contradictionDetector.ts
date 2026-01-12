@@ -1,11 +1,10 @@
-// Contradiction detection service
+// Contradiction detection service - Production grade with local vector search
 
 import { v4 as uuidv4 } from 'uuid';
 import type { Claim, Contradiction, ContradictionType } from '../types';
 import { detectContradiction } from './openai';
 import { buildContradictionPrompt } from '../prompts';
-import { findSimilarClaims } from './chroma';
-import { generateEmbedding } from './openai';
+import { findSimilarVectors, cosineSimilarity } from '../utils/vectorSearch';
 
 export interface DetectionProgress {
   current: number;
@@ -23,15 +22,28 @@ export interface CandidatePair {
   reason: 'semantic' | 'entity' | 'topic' | 'temporal';
 }
 
+export interface ClaimWithEmbedding {
+  claim: Claim;
+  embedding: number[];
+}
+
 export async function findContradictions(
   claims: Claim[],
   topK: number = 8,
   similarityThreshold: number = 0.7,
-  onProgress?: ProgressCallback
+  onProgress?: ProgressCallback,
+  embeddings?: number[][]
 ): Promise<Contradiction[]> {
   const contradictions: Contradiction[] = [];
   let pairsAnalyzed = 0;
   const alreadyCompared = new Set<string>();
+
+  console.log(`Starting contradiction detection: ${claims.length} claims, threshold=${similarityThreshold}`);
+
+  // Create claim-embedding pairs
+  const claimsWithEmbeddings: ClaimWithEmbedding[] = embeddings
+    ? claims.map((claim, i) => ({ claim, embedding: embeddings[i] }))
+    : [];
 
   for (let i = 0; i < claims.length; i++) {
     const claim = claims[i];
@@ -47,7 +59,13 @@ export async function findContradictions(
 
     try {
       // Generate candidates for this claim
-      const candidates = await generateCandidates(claim, claims, topK, similarityThreshold);
+      const candidates = generateCandidates(
+        claim,
+        claims,
+        claimsWithEmbeddings,
+        topK,
+        similarityThreshold
+      );
 
       // Analyze each candidate pair
       for (const candidate of candidates) {
@@ -69,6 +87,7 @@ export async function findContradictions(
 
         if (contradiction) {
           contradictions.push(contradiction);
+          console.log(`✓ Found contradiction: ${contradiction.type} (confidence: ${contradiction.confidence.toFixed(2)})`);
         }
 
         // Small delay to avoid rate limiting
@@ -89,39 +108,60 @@ export async function findContradictions(
     });
   }
 
+  console.log(`Contradiction detection complete: ${contradictions.length} contradictions from ${pairsAnalyzed} pairs`);
+
   return contradictions;
 }
 
-async function generateCandidates(
+function generateCandidates(
   claim: Claim,
   allClaims: Claim[],
+  claimsWithEmbeddings: ClaimWithEmbedding[],
   topK: number,
   similarityThreshold: number
-): Promise<CandidatePair[]> {
+): CandidatePair[] {
   const candidates: CandidatePair[] = [];
   const seenIds = new Set<string>([claim.id]);
 
+  // CRITICAL: Skip claims from the same utterance (they can't contradict each other)
+  const sameUtteranceIds = new Set(
+    allClaims.filter(c => c.utteranceId === claim.utteranceId).map(c => c.id)
+  );
+
   try {
-    // 1. Semantic similarity (using vector search)
-    const embedding = await generateEmbedding(claim.normalizedText);
-    const similarClaims = await findSimilarClaims(embedding, topK * 2);
+    // 1. Semantic similarity (using local vector search if embeddings available)
+    if (claimsWithEmbeddings.length > 0) {
+      const currentClaimEmbedding = claimsWithEmbeddings.find(ce => ce.claim.id === claim.id);
 
-    for (const similar of similarClaims) {
-      if (seenIds.has(similar.claimId)) continue;
+      if (currentClaimEmbedding) {
+        // Get all other embeddings
+        const otherClaims = claimsWithEmbeddings.filter(
+          ce => ce.claim.id !== claim.id && !sameUtteranceIds.has(ce.claim.id)
+        );
 
-      // Convert distance to similarity (Chroma returns cosine distance)
-      const similarity = 1 - similar.distance;
+        const otherEmbeddings = otherClaims.map(ce => ce.embedding);
 
-      if (similarity >= similarityThreshold) {
-        const claimB = allClaims.find(c => c.id === similar.claimId);
-        if (claimB) {
+        // Find similar vectors
+        const similarResults = findSimilarVectors(
+          currentClaimEmbedding.embedding,
+          otherEmbeddings,
+          topK * 2,
+          similarityThreshold
+        );
+
+        for (const result of similarResults) {
+          const claimB = otherClaims[result.index].claim;
+
+          if (seenIds.has(claimB.id)) continue;
+          if (sameUtteranceIds.has(claimB.id)) continue; // Double-check
+
           candidates.push({
             claimA: claim,
             claimB,
-            similarity,
+            similarity: result.similarity,
             reason: 'semantic',
           });
-          seenIds.add(similar.claimId);
+          seenIds.add(claimB.id);
         }
       }
     }
@@ -129,9 +169,10 @@ async function generateCandidates(
     console.warn('Semantic search failed, falling back to lexical matching:', error);
   }
 
-  // 2. Same entity mentions
+  // 2. Same entity mentions (but different utterances)
   for (const claimB of allClaims) {
     if (seenIds.has(claimB.id)) continue;
+    if (sameUtteranceIds.has(claimB.id)) continue; // Skip same utterance
 
     const sharedEntities = claim.entities.filter(e =>
       claimB.entities.some(e2 => e2.toLowerCase() === e.toLowerCase())
@@ -148,9 +189,10 @@ async function generateCandidates(
     }
   }
 
-  // 3. Same topic
+  // 3. Same topic (but different utterances)
   for (const claimB of allClaims) {
     if (seenIds.has(claimB.id)) continue;
+    if (sameUtteranceIds.has(claimB.id)) continue; // Skip same utterance
 
     const sharedTopics = claim.topics.filter(t =>
       claimB.topics.includes(t)
@@ -167,10 +209,11 @@ async function generateCandidates(
     }
   }
 
-  // 4. Temporal overlap (if both have time scopes)
+  // 4. Temporal overlap (if both have time scopes, different utterances)
   if (claim.timeScope) {
     for (const claimB of allClaims) {
       if (seenIds.has(claimB.id)) continue;
+      if (sameUtteranceIds.has(claimB.id)) continue; // Skip same utterance
 
       if (claimB.timeScope && hasTemporalOverlap(claim.timeScope, claimB.timeScope)) {
         candidates.push({
@@ -194,6 +237,18 @@ export async function detectContradictionInPair(
   claimA: Claim,
   claimB: Claim
 ): Promise<Contradiction | null> {
+  // CRITICAL: Never compare a claim to itself
+  if (claimA.id === claimB.id) {
+    console.warn('Attempted to compare claim to itself:', claimA.id);
+    return null;
+  }
+
+  // CRITICAL: Never compare claims from the same utterance
+  if (claimA.utteranceId === claimB.utteranceId) {
+    console.warn('Attempted to compare claims from same utterance:', claimA.utteranceId);
+    return null;
+  }
+
   // Build prompt
   const prompt = buildContradictionPrompt(
     {
