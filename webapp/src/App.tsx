@@ -61,6 +61,7 @@ function App() {
     try {
       // Step 1: Parse file
       const document = await createDocumentFromFile(file);
+      console.log(`Document parsed: ${document.pageCount || 'N/A'} pages, ${document.rawText.length} characters`);
       saveDocument(document);
 
       setStatus({
@@ -70,9 +71,14 @@ function App() {
       });
 
       const utterances = extractUtterances(document);
+      console.log(`Extracted ${utterances.length} utterances (${utterances.filter(u => u.role === 'QUESTION').length} questions, ${utterances.filter(u => u.role === 'ANSWER').length} answers)`);
       saveUtterances(utterances);
 
       const answerCount = utterances.filter(u => u.role === 'ANSWER').length;
+
+      if (answerCount === 0) {
+        throw new Error('No Q&A pairs found in document. Please ensure the transcript uses "Q." and "A." format for questions and answers.');
+      }
 
       setStatus({
         stage: 'extracting',
@@ -90,6 +96,7 @@ function App() {
         });
       });
 
+      console.log(`Extracted ${claims.length} claims total`);
       saveClaims(claims);
 
       setStatus({
@@ -100,10 +107,21 @@ function App() {
 
       // Step 3: Generate embeddings and store in Chroma
       try {
-        const claimTexts = claims.map(c => c.normalizedText);
+        // Filter and validate claim texts before generating embeddings
+        const validClaims = claims.filter(c => c.normalizedText && c.normalizedText.trim().length > 0);
+
+        if (validClaims.length !== claims.length) {
+          console.warn(`Filtered out ${claims.length - validClaims.length} claims with invalid text`);
+        }
+
+        if (validClaims.length === 0) {
+          throw new Error('No valid claims found for embedding generation');
+        }
+
+        const claimTexts = validClaims.map(c => c.normalizedText);
         const embeddings = await generateBatchEmbeddings(claimTexts);
 
-        const claimsWithEmbeddings = claims.map((claim, i) => ({
+        const claimsWithEmbeddings = validClaims.map((claim, i) => ({
           claim,
           embedding: embeddings[i],
         }));

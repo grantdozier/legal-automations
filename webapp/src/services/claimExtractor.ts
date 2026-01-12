@@ -55,20 +55,33 @@ export async function extractClaimsFromUtterance(utterance: Utterance): Promise<
   // Call LLM
   const extractions = await extractClaimsFromTestimony(prompt);
 
-  // Convert to Claim objects
-  const claims: Claim[] = extractions.map((extraction: ClaimExtraction) => ({
-    id: uuidv4(),
-    utteranceId: utterance.id,
-    documentId: utterance.documentId,
-    normalizedText: extraction.normalized_text,
-    polarity: extraction.polarity,
-    modality: extraction.modality,
-    timeScope: extraction.time_scope,
-    entities: extraction.entities || [],
-    topics: extraction.topics || [],
-    citation: utterance.citation,
-    createdAt: new Date(),
-  }));
+  // Convert to Claim objects and validate
+  const claims: Claim[] = extractions
+    .filter((extraction: ClaimExtraction) => {
+      // Filter out invalid extractions
+      const hasValidText = extraction.normalized_text &&
+                          typeof extraction.normalized_text === 'string' &&
+                          extraction.normalized_text.trim().length > 0;
+
+      if (!hasValidText) {
+        console.warn('Skipping claim extraction with invalid normalized_text:', extraction);
+      }
+
+      return hasValidText;
+    })
+    .map((extraction: ClaimExtraction) => ({
+      id: uuidv4(),
+      utteranceId: utterance.id,
+      documentId: utterance.documentId,
+      normalizedText: extraction.normalized_text.trim(),
+      polarity: extraction.polarity,
+      modality: extraction.modality,
+      timeScope: extraction.time_scope,
+      entities: extraction.entities || [],
+      topics: extraction.topics || [],
+      citation: utterance.citation,
+      createdAt: new Date(),
+    }));
 
   return claims;
 }
