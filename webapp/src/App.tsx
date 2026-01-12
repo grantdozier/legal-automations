@@ -200,9 +200,14 @@ function App() {
               </svg>
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-slate-900">
-                Deposition Analysis
-              </h1>
+              <div className="flex items-center gap-3 mb-1">
+                <h1 className="text-3xl font-bold text-slate-900">
+                  Deposition Analysis
+                </h1>
+                <span className="px-3 py-1 bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-700 text-xs font-semibold rounded-full border border-blue-200">
+                  AI Agent Attorney
+                </span>
+              </div>
               <p className="text-slate-600 mt-1">
                 AI-powered contradiction detection with precise citations
               </p>
