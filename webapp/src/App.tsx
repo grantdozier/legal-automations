@@ -100,9 +100,11 @@ function App() {
 
       // Step 3: Generate embeddings for local vector search
       let embeddings: number[][] = [];
+      let validClaims = claims;
+
       try {
         // Filter and validate claim texts before generating embeddings
-        const validClaims = claims.filter(c => c.normalizedText && c.normalizedText.trim().length > 0);
+        validClaims = claims.filter(c => c.normalizedText && c.normalizedText.trim().length > 0);
 
         if (validClaims.length !== claims.length) {
           console.warn(`Filtered out ${claims.length - validClaims.length} claims with invalid text`);
@@ -112,6 +114,7 @@ function App() {
           throw new Error('No valid claims found for embedding generation');
         }
 
+        console.log(`Generating embeddings for ${validClaims.length} valid claims...`);
         const claimTexts = validClaims.map(c => c.normalizedText);
         embeddings = await generateBatchEmbeddings(claimTexts);
         console.log(`✓ Generated ${embeddings.length} embeddings for local vector search`);
@@ -123,7 +126,9 @@ function App() {
         });
 
         // Step 4: Detect contradictions using local vector similarity
-        const contradictions = await findContradictions(claims, 8, 0.7, (progress) => {
+        // IMPORTANT: Pass validClaims (not all claims) since embeddings match validClaims indices
+        // Lower threshold to 0.6 to find more candidates
+        const contradictions = await findContradictions(validClaims, 10, 0.6, (progress) => {
           const analysisProgress = 70 + (progress.current / progress.total) * 25;
           setStatus({
             stage: 'analyzing',
@@ -141,13 +146,13 @@ function App() {
         });
 
         // Step 5: Generate report
-        const generatedReport = generateReport(document, claims, contradictions);
+        const generatedReport = generateReport(document, validClaims, contradictions);
         setReport(generatedReport);
 
         setStatus({
           stage: 'complete',
           progress: 100,
-          message: `Analysis complete! Found ${claims.length} claims and ${contradictions.length} contradictions.`,
+          message: `Analysis complete! Found ${validClaims.length} claims and ${contradictions.length} contradictions.`,
         });
       } catch (embeddingError: any) {
         console.error('Embedding/analysis error:', embeddingError);

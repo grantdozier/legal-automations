@@ -67,6 +67,10 @@ export async function findContradictions(
         similarityThreshold
       );
 
+      if (i < 3) { // Log first 3 for debugging
+        console.log(`Claim ${i + 1}: "${claim.normalizedText.substring(0, 80)}..." - ${candidates.length} candidates found`);
+      }
+
       // Analyze each candidate pair
       for (const candidate of candidates) {
         const pairKey = getPairKey(candidate.claimA.id, candidate.claimB.id);
@@ -249,6 +253,10 @@ export async function detectContradictionInPair(
     return null;
   }
 
+  console.log('Comparing claims:');
+  console.log('  A:', claimA.normalizedText.substring(0, 100), '...', claimA.citation);
+  console.log('  B:', claimB.normalizedText.substring(0, 100), '...', claimB.citation);
+
   // Build prompt
   const prompt = buildContradictionPrompt(
     {
@@ -271,6 +279,8 @@ export async function detectContradictionInPair(
 
   // Call LLM
   const judgment = await detectContradiction(prompt);
+
+  console.log('  LLM judgment:', judgment.label, 'confidence:', judgment.confidence);
 
   // If consistent, return null
   if (judgment.label === 'CONSISTENT') {
