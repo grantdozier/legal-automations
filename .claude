@@ -1,0 +1,142 @@
+# Legal Deposition Analysis Webapp
+
+## Project Overview
+A client-side webapp for analyzing legal deposition transcripts, hosted on GitHub Pages. The system ingests transcripts, extracts claims, identifies contradictions, and generates attorney-ready reports with citations.
+
+## Technology Stack
+- **Frontend**: React with TypeScript
+- **Styling**: Tailwind CSS
+- **Hosting**: GitHub Pages (static site)
+- **LLM**: OpenAI API (user-provided key)
+- **Vector Database**: Chroma Cloud (user-provided key)
+- **Build Tool**: Vite
+- **PDF Processing**: pdf.js (client-side)
+
+## Architecture
+Since we're using GitHub Pages (static hosting), all processing happens client-side:
+1. **Browser-based PDF/text parsing**
+2. **OpenAI API calls** for claim extraction and contradiction detection
+3. **Chroma Cloud** for vector storage and semantic search
+4. **Local browser storage** for session management
+
+## Core Features
+1. **Ingestion**: Upload PDF/TXT deposition transcripts
+2. **Parsing**: Extract Q/A utterances with page/line citations
+3. **Claim Extraction**: Use LLM to extract atomic claims from testimony
+4. **Vector Embedding**: Store claims in Chroma Cloud for semantic search
+5. **Contradiction Detection**: Find hard/soft contradictions with citations
+6. **Report Generation**: Export markdown/PDF reports
+
+## API Keys Required
+- `OPENAI_API_KEY`: For LLM calls (claim extraction, contradiction analysis)
+- `CHROMA_API_KEY`: For vector database operations
+- `CHROMA_TENANT`: Chroma Cloud tenant ID
+- `CHROMA_DATABASE`: Chroma Cloud database name
+
+## File Structure
+```
+/
+├── .github/
+│   └── workflows/
+│       └── deploy.yml          # GitHub Actions for GH Pages
+├── src/
+│   ├── components/
+│   │   ├── FileUpload.tsx
+│   │   ├── TranscriptViewer.tsx
+│   │   ├── ClaimsList.tsx
+│   │   ├── ContradictionReport.tsx
+│   │   └── ApiKeyConfig.tsx
+│   ├── services/
+│   │   ├── parser.ts           # Parse transcripts
+│   │   ├── openai.ts           # OpenAI API client
+│   │   ├── chroma.ts           # Chroma Cloud client
+│   │   ├── claimExtractor.ts   # Claim extraction logic
+│   │   ├── contradictionDetector.ts
+│   │   └── reportGenerator.ts
+│   ├── types/
+│   │   └── index.ts            # TypeScript types
+│   ├── utils/
+│   │   └── citations.ts        # Citation handling
+│   ├── prompts/
+│   │   └── index.ts            # LLM prompts
+│   ├── App.tsx
+│   └── main.tsx
+├── public/
+├── docs/                       # Build output for GH Pages
+├── index.html
+├── package.json
+├── tsconfig.json
+├── vite.config.ts
+├── tailwind.config.js
+└── README.md
+```
+
+## Data Models (TypeScript Interfaces)
+```typescript
+interface Document {
+  id: string;
+  title: string;
+  sourceType: 'pdf' | 'txt';
+  uploadedAt: Date;
+  text: string;
+}
+
+interface Utterance {
+  id: string;
+  documentId: string;
+  pageNumber: number;
+  lineStart?: number;
+  lineEnd?: number;
+  speaker: string;
+  role: 'QUESTION' | 'ANSWER';
+  text: string;
+  citation: string;
+}
+
+interface Claim {
+  id: string;
+  utteranceId: string;
+  normalizedText: string;
+  polarity: 'affirm' | 'deny' | 'unknown';
+  modality: 'certain' | 'uncertain' | 'dont_recall';
+  timeScope?: string;
+  entities: string[];
+  topics: string[];
+  citation: string;
+  embeddingId?: string;
+}
+
+interface Contradiction {
+  id: string;
+  claimA: Claim;
+  claimB: Claim;
+  type: 'HARD_CONTRADICTION' | 'SOFT_INCONSISTENCY' | 'SCOPE_SHIFT' | 'TEMPORAL_CONFLICT' | 'DEFINITION_DRIFT';
+  explanation: string;
+  confidence: number;
+  createdAt: Date;
+}
+```
+
+## LLM Prompts
+
+### Claim Extraction Prompt
+Extract atomic claims from witness testimony. Return strict JSON with neutral language and precise citations.
+
+### Contradiction Detection Prompt
+Compare two claims and identify conflicts. Never use "lying" - use "inconsistent with prior testimony" or "appears to conflict".
+
+## Development Workflow
+1. ✅ Set up project structure with Vite + React + TypeScript
+2. ✅ Configure GitHub Pages deployment
+3. ✅ Implement API key configuration UI
+4. ✅ Build transcript parser (PDF + TXT)
+5. ✅ Implement OpenAI integration
+6. ✅ Implement Chroma Cloud integration
+7. ✅ Build claim extraction service
+8. ✅ Build contradiction detection service
+9. ✅ Create report generator
+10. ✅ Build UI components
+11. ✅ Testing and refinement
+
+## Deployment
+Push to `main` branch → GitHub Actions builds → Deploys to `gh-pages` branch → Live on GitHub Pages
