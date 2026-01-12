@@ -8,8 +8,14 @@ export default defineConfig({
   build: {
     outDir: '../docs',
     emptyOutDir: true,
+    rollupOptions: {
+      external: ['@chroma-core/default-embed'],
+    },
   },
   define: {
     global: 'globalThis',
+  },
+  optimizeDeps: {
+    exclude: ['chromadb'],
   },
 })

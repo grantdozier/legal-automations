@@ -35,6 +35,11 @@ jobs:
           npm ci
 
       - name: Build
+        env:
+          VITE_OPENAI_API_KEY: ${{ secrets.VITE_OPENAI_API_KEY }}
+          VITE_CHROMA_API_KEY: ${{ secrets.VITE_CHROMA_API_KEY }}
+          VITE_CHROMA_TENANT: ${{ secrets.VITE_CHROMA_TENANT }}
+          VITE_CHROMA_DATABASE: ${{ secrets.VITE_CHROMA_DATABASE }}
         run: |
           cd webapp
           npm run build

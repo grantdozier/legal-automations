@@ -63,14 +63,19 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileSelected, disabled
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6">
-      <h2 className="text-2xl font-bold mb-4">Upload Deposition Transcript</h2>
+    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
+      <div className="text-center mb-6">
+        <h2 className="text-2xl font-bold text-slate-900 mb-2">Upload Deposition Transcript</h2>
+        <p className="text-slate-600">
+          Upload a PDF or TXT file to begin analysis
+        </p>
+      </div>
 
       <div
-        className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+        className={`relative border-2 border-dashed rounded-xl p-12 text-center transition-all duration-200 ${
           dragActive
-            ? 'border-blue-500 bg-blue-50'
-            : 'border-gray-300 bg-gray-50'
+            ? 'border-blue-500 bg-blue-50 scale-[1.02]'
+            : 'border-slate-300 bg-slate-50 hover:border-slate-400 hover:bg-slate-100'
         } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
         onDragEnter={handleDrag}
         onDragLeave={handleDrag}
@@ -88,40 +93,61 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileSelected, disabled
 
         <label
           htmlFor="fileInput"
-          className={disabled ? 'cursor-not-allowed' : 'cursor-pointer'}
+          className={disabled ? 'cursor-not-allowed' : 'cursor-pointer block'}
         >
-          <svg
-            className="mx-auto h-12 w-12 text-gray-400"
-            stroke="currentColor"
-            fill="none"
-            viewBox="0 0 48 48"
-            aria-hidden="true"
-          >
-            <path
-              d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-          <p className="mt-2 text-sm text-gray-600">
-            <span className="font-semibold text-blue-600">Click to upload</span> or
-            drag and drop
-          </p>
-          <p className="text-xs text-gray-500 mt-1">PDF or TXT files only</p>
+          {/* Icon */}
+          <div className="mx-auto w-16 h-16 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-full flex items-center justify-center mb-4">
+            <svg
+              className="w-8 h-8 text-white"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+              />
+            </svg>
+          </div>
+
+          {/* Text */}
+          <div className="space-y-2">
+            <p className="text-lg font-semibold text-slate-900">
+              Drop your transcript here
+            </p>
+            <p className="text-slate-600">
+              or <span className="text-blue-600 font-medium hover:text-blue-700">browse files</span>
+            </p>
+            <p className="text-sm text-slate-500 mt-3">
+              Supports PDF and TXT • Max size: 100MB
+            </p>
+          </div>
         </label>
       </div>
 
-      <div className="mt-4 text-sm text-gray-600">
-        <p className="font-semibold mb-2">Supported formats:</p>
-        <ul className="list-disc list-inside space-y-1">
-          <li>PDF deposition transcripts (with or without line numbers)</li>
-          <li>Plain text transcripts (TXT format)</li>
-        </ul>
-        <p className="mt-3 text-xs text-gray-500">
-          For best results, ensure your transcript includes clear Q/A markers (e.g., "Q." and "A.")
-          and page numbers.
-        </p>
+      {/* Additional Info */}
+      <div className="mt-6 grid md:grid-cols-2 gap-4">
+        <div className="flex items-start space-x-3 p-4 bg-blue-50 rounded-lg border border-blue-100">
+          <svg className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <div>
+            <h4 className="font-semibold text-slate-900 text-sm">Best Results</h4>
+            <p className="text-xs text-slate-600 mt-1">Transcripts with clear Q. and A. markers and page numbers</p>
+          </div>
+        </div>
+
+        <div className="flex items-start space-x-3 p-4 bg-purple-50 rounded-lg border border-purple-100">
+          <svg className="w-5 h-5 text-purple-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
+          <div>
+            <h4 className="font-semibold text-slate-900 text-sm">Secure & Private</h4>
+            <p className="text-xs text-slate-600 mt-1">Your documents are processed securely and never stored</p>
+          </div>
+        </div>
       </div>
     </div>
   );
