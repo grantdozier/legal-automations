@@ -62,11 +62,15 @@ export async function addClaims(claimsWithEmbeddings: ClaimWithEmbedding[]): Pro
   }
 
   if (claimsWithEmbeddings.length === 0) {
+    console.log('No claims to add to Chroma');
     return;
   }
 
+  console.log(`Adding ${claimsWithEmbeddings.length} claims to Chroma Cloud...`);
+
   try {
     await ensureCollection();
+    console.log('✓ Collection ready');
 
     const collection = await chromaClient.getCollection({
       name: collectionName,
@@ -93,9 +97,16 @@ export async function addClaims(claimsWithEmbeddings: ClaimWithEmbedding[]): Pro
       metadatas,
       documents,
     });
-  } catch (error) {
+
+    console.log(`✓ Successfully added ${claimsWithEmbeddings.length} claims to Chroma Cloud (collection: ${collectionName})`);
+  } catch (error: any) {
     console.error('Failed to add claims to Chroma:', error);
-    throw new Error('Failed to store claims in vector database');
+    console.error('Error details:', {
+      message: error.message,
+      status: error.status,
+      response: error.response,
+    });
+    throw new Error(`Failed to store claims in vector database: ${error.message}`);
   }
 }
 

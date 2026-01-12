@@ -129,8 +129,10 @@ function App() {
         // Store in Chroma
         try {
           await addClaims(claimsWithEmbeddings);
-        } catch (chromaError) {
-          console.warn('Chroma storage failed:', chromaError);
+        } catch (chromaError: any) {
+          console.error('Chroma storage failed:', chromaError);
+          // Continue without Chroma - contradiction detection will still work
+          alert(`Warning: Failed to store data in Chroma Cloud: ${chromaError.message}. Analysis will continue but semantic search may be limited.`);
         }
 
         setStatus({
