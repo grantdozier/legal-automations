@@ -5,8 +5,9 @@ import { v4 as uuidv4 } from 'uuid';
 import type { Document, Page, Utterance } from '../types';
 import { formatCitation } from '../utils/citations';
 
-// Configure PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+// Configure PDF.js worker - use bundled worker for production
+import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
 export async function parseTextFile(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
