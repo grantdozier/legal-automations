@@ -1,6 +1,7 @@
 // Deposition transcript parser service
 
 import * as pdfjsLib from 'pdfjs-dist';
+import { PDFDocument } from 'pdf-lib';
 import { v4 as uuidv4 } from 'uuid';
 import type { Document, Page, Utterance } from '../types';
 import { formatCitation } from '../utils/citations';
@@ -21,30 +22,101 @@ export async function parseTextFile(file: File): Promise<string> {
   });
 }
 
-export async function parsePdfFile(file: File): Promise<{ text: string; pageCount: number }> {
-  try {
-    const arrayBuffer = await file.arrayBuffer();
-    const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
-    const pdf = await loadingTask.promise;
+// Primary PDF parser using PDF.js with robust configuration
+async function parsePdfWithPdfjs(arrayBuffer: ArrayBuffer): Promise<{ text: string; pageCount: number }> {
+  const loadingTask = pdfjsLib.getDocument({
+    data: arrayBuffer,
+    useWorkerFetch: false,
+    isEvalSupported: false,
+    useSystemFonts: true,
+    verbosity: 0, // Suppress warnings
+  });
 
-    const pageTexts: string[] = [];
+  const pdf = await loadingTask.promise;
+  const pageTexts: string[] = [];
 
-    for (let i = 1; i <= pdf.numPages; i++) {
+  for (let i = 1; i <= pdf.numPages; i++) {
+    try {
       const page = await pdf.getPage(i);
       const textContent = await page.getTextContent();
       const pageText = textContent.items
-        .map((item: any) => item.str)
+        .map((item: any) => {
+          // Handle different text item formats
+          if (typeof item === 'string') return item;
+          return item.str || '';
+        })
+        .filter(Boolean)
         .join(' ');
-      pageTexts.push(`\n--- Page ${i} ---\n${pageText}`);
-    }
 
-    return {
-      text: pageTexts.join('\n'),
-      pageCount: pdf.numPages,
-    };
-  } catch (error) {
-    console.error('PDF parsing error:', error);
-    throw new Error('Failed to parse PDF file');
+      pageTexts.push(`\n--- Page ${i} ---\n${pageText}`);
+    } catch (pageError) {
+      console.warn(`Error parsing page ${i}:`, pageError);
+      pageTexts.push(`\n--- Page ${i} ---\n[Error extracting text from this page]`);
+    }
+  }
+
+  return {
+    text: pageTexts.join('\n'),
+    pageCount: pdf.numPages,
+  };
+}
+
+// Fallback: validate PDF structure with pdf-lib
+async function validatePdfWithPdfLib(arrayBuffer: ArrayBuffer): Promise<{ pageCount: number }> {
+  const pdfDoc = await PDFDocument.load(arrayBuffer, {
+    ignoreEncryption: true,
+    updateMetadata: false,
+  });
+  return { pageCount: pdfDoc.getPageCount() };
+}
+
+export async function parsePdfFile(file: File): Promise<{ text: string; pageCount: number }> {
+  console.log(`Parsing PDF: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
+
+  const arrayBuffer = await file.arrayBuffer();
+
+  // Try PDF.js (best for text extraction)
+  try {
+    const result = await parsePdfWithPdfjs(arrayBuffer);
+    console.log(`✓ PDF.js: Successfully extracted text from ${result.pageCount} pages`);
+    return result;
+  } catch (pdfjsError: any) {
+    console.warn('PDF.js failed:', pdfjsError.message);
+
+    // Validate PDF structure with pdf-lib
+    try {
+      const validation = await validatePdfWithPdfLib(arrayBuffer);
+      console.log(`✓ pdf-lib: PDF is valid with ${validation.pageCount} pages, but text extraction failed`);
+
+      // Return a message for user
+      const errorText = `
+--- PDF Validation Results ---
+The PDF file is structurally valid with ${validation.pageCount} pages, but text extraction failed.
+
+Possible reasons:
+- PDF contains scanned images without OCR text
+- PDF uses unsupported text encoding
+- PDF is password protected or encrypted
+
+Recommended solutions:
+1. Export the PDF to plain text format (.txt)
+2. Use OCR software to extract text from scanned documents
+3. Copy/paste text directly from the PDF into a .txt file
+
+Original error: ${pdfjsError.message}
+      `.trim();
+
+      return {
+        text: errorText,
+        pageCount: validation.pageCount,
+      };
+    } catch (pdfLibError: any) {
+      console.error('pdf-lib validation also failed:', pdfLibError.message);
+      throw new Error(
+        `Unable to parse PDF file. The file may be corrupted, encrypted, or in an unsupported format. ` +
+        `Please try converting to .txt format. Error: ${pdfjsError.message}`
+      );
+    }
   }
 }
 

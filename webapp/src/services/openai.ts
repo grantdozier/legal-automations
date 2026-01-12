@@ -155,10 +155,16 @@ export async function generateEmbedding(text: string): Promise<number[]> {
     throw new Error('OpenAI client not initialized. Please configure your API key.');
   }
 
+  const cleanText = (text || '').trim();
+
+  if (cleanText.length === 0) {
+    throw new Error('Cannot generate embedding for empty text');
+  }
+
   try {
     const response = await openaiClient.embeddings.create({
       model: 'text-embedding-3-large',
-      input: text,
+      input: cleanText,
     });
 
     return response.data[0].embedding;
@@ -173,13 +179,48 @@ export async function generateBatchEmbeddings(texts: string[]): Promise<number[]
     throw new Error('OpenAI client not initialized. Please configure your API key.');
   }
 
-  try {
-    const response = await openaiClient.embeddings.create({
-      model: 'text-embedding-3-large',
-      input: texts,
-    });
+  // Filter out empty or invalid texts
+  const validTexts = texts
+    .map(text => (text || '').trim())
+    .filter(text => text.length > 0);
 
-    return response.data.map(item => item.embedding);
+  if (validTexts.length === 0) {
+    throw new Error('No valid texts provided for embedding generation');
+  }
+
+  if (validTexts.length !== texts.length) {
+    console.warn(`Filtered out ${texts.length - validTexts.length} empty/invalid texts`);
+  }
+
+  // OpenAI has a limit of 2048 texts per batch - split if necessary
+  const MAX_BATCH_SIZE = 2048;
+  const batches: string[][] = [];
+
+  for (let i = 0; i < validTexts.length; i += MAX_BATCH_SIZE) {
+    batches.push(validTexts.slice(i, i + MAX_BATCH_SIZE));
+  }
+
+  try {
+    const allEmbeddings: number[][] = [];
+
+    for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+      const batch = batches[batchIndex];
+      console.log(`Generating embeddings for batch ${batchIndex + 1}/${batches.length} (${batch.length} texts)`);
+
+      const response = await openaiClient.embeddings.create({
+        model: 'text-embedding-3-large',
+        input: batch,
+      });
+
+      allEmbeddings.push(...response.data.map(item => item.embedding));
+
+      // Add small delay between batches to avoid rate limits
+      if (batchIndex < batches.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+
+    return allEmbeddings;
   } catch (error: any) {
     console.error('OpenAI batch embedding error:', error);
     throw new Error(`Failed to generate embeddings: ${error?.message || 'Unknown error'}`);
