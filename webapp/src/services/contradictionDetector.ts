@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import type { Claim, Contradiction, ContradictionType } from '../types';
 import { detectContradiction } from './openai';
 import { buildContradictionPrompt } from '../prompts';
-import { findSimilarVectors, cosineSimilarity } from '../utils/vectorSearch';
+import { findSimilarVectors } from '../utils/vectorSearch';
 
 export interface DetectionProgress {
   current: number;
